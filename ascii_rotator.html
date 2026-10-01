@@ -1,0 +1,1122 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ASCII ROTATOR - Retro Cyber Puzzle</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600;700&family=VT323&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg-dark: #07090e;
+            --container-opaque: #0d121d;
+            --tile-opaque: #04060a;
+            --neon-green: #00ff66;
+            --neon-cyan: #00f3ff;
+            --neon-pink: #ff0055;
+            --neon-yellow: #ffcc00;
+        }
+
+        * {
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            font-family: 'Fira Code', monospace;
+            color: #e2e8f0;
+            overscroll-behavior: none;
+            touch-action: manipulation;
+            overflow: hidden;
+        }
+
+        /* CRT Overlay Filter */
+        .crt-overlay {
+            background: linear-gradient(
+                rgba(18, 16, 16, 0) 50%, 
+                rgba(0, 0, 0, 0.3) 50%
+            ), linear-gradient(
+                90deg,
+                rgba(255, 0, 0, 0.03),
+                rgba(0, 255, 0, 0.01),
+                rgba(0, 0, 255, 0.03)
+            );
+            background-size: 100% 3px, 6px 100%;
+            pointer-events: none;
+        }
+
+        /* OPAQUE CONTAINERS - Fixes binary rain bleeding */
+        .opaque-card {
+            background-color: var(--container-opaque) !important;
+            opacity: 1 !important;
+        }
+
+        .terminal-border {
+            border: 2px solid var(--neon-cyan);
+            box-shadow: 0 0 15px rgba(0, 243, 255, 0.3), inset 0 0 15px rgba(0, 243, 255, 0.1);
+        }
+
+        /* 3x3 Puzzle Grid Container */
+        .puzzle-grid-container {
+            width: min(88vw, 390px);
+            height: min(88vw, 390px);
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            gap: 4px;
+            background-color: #0f172a; /* SOLID OPAQUE */
+            border: 2px solid #1e293b;
+            padding: 4px;
+            border-radius: 12px;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.9);
+            position: relative;
+        }
+
+        /* Individual Tile Wrapper - Solid Opaque Background */
+        .tile-wrapper {
+            position: relative;
+            background-color: var(--tile-opaque) !important; /* Fully opaque background */
+            border-radius: 6px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #1e293b;
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+
+        .tile-inner {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transform-origin: center center;
+            will-change: transform;
+            background-color: var(--tile-opaque) !important;
+        }
+
+        .ascii-text {
+            font-family: 'Fira Code', monospace;
+            font-size: clamp(9px, 3.1vw, 14.5px);
+            line-height: 1.0;
+            letter-spacing: 0px;
+            white-space: pre;
+            margin: 0;
+            padding: 0;
+            pointer-events: none;
+            text-align: center;
+            color: #64748b;
+            transition: color 0.15s, text-shadow 0.15s;
+        }
+
+        /* Active Tile State */
+        .tile-active {
+            border-color: var(--neon-cyan) !important;
+            box-shadow: 0 0 14px rgba(0, 243, 255, 0.6), inset 0 0 10px rgba(0, 243, 255, 0.2);
+            z-index: 10;
+        }
+
+        .tile-active .ascii-text {
+            color: #38bdf8;
+            text-shadow: 0 0 6px rgba(56, 189, 248, 0.7);
+        }
+
+        /* Sweetspot Target Alignment (Aligned at 0 degrees) */
+        .tile-sweetspot {
+            border-color: var(--neon-green) !important;
+            box-shadow: 0 0 22px rgba(0, 255, 102, 0.95), inset 0 0 15px rgba(0, 255, 102, 0.3) !important;
+            background-color: #03140a !important;
+        }
+
+        .tile-sweetspot .ascii-text {
+            color: var(--neon-green) !important;
+            text-shadow: 0 0 10px rgba(0, 255, 102, 1) !important;
+        }
+
+        /* Locked Tile State */
+        .tile-locked {
+            border-color: #334155 !important;
+            background-color: #020617 !important;
+        }
+
+        .tile-locked .ascii-text {
+            color: #f8fafc !important;
+            text-shadow: 0 0 3px rgba(255, 255, 255, 0.3);
+        }
+
+        /* Completed Grid Styling */
+        .puzzle-grid-container.completed {
+            gap: 0;
+            padding: 0;
+            border-color: var(--neon-green);
+            box-shadow: 0 0 40px rgba(0, 255, 102, 0.7);
+        }
+
+        .puzzle-grid-container.completed .tile-wrapper {
+            border-color: transparent !important;
+            border-radius: 0;
+        }
+
+        .puzzle-grid-container.completed .ascii-text {
+            color: var(--neon-green) !important;
+            text-shadow: 0 0 8px rgba(0, 255, 102, 0.8);
+        }
+
+        /* Target Indicator Reticle */
+        .target-reticle {
+            position: absolute;
+            inset: -2px;
+            border: 2px dashed var(--neon-green);
+            border-radius: 6px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.1s ease;
+            animation: spin-reticle 4s linear infinite;
+        }
+
+        .tile-sweetspot .target-reticle {
+            opacity: 1;
+        }
+
+        @keyframes spin-reticle {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Screen Red Shake Effect on Miss */
+        .miss-shake {
+            animation: error-shake 0.3s cubic-bezier(.36,.07,.19,.97) both;
+        }
+
+        @keyframes error-shake {
+            10%, 90% { transform: translate3d(-3px, 0, 0); }
+            20%, 80% { transform: translate3d(5px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-6px, 0, 0); }
+            40%, 60% { transform: translate3d(6px, 0, 0); }
+        }
+
+        /* Cyber Buttons */
+        .btn-cyber {
+            position: relative;
+            background: #0d1527;
+            border: 1px solid var(--neon-cyan);
+            color: var(--neon-cyan);
+            text-transform: uppercase;
+            font-weight: 700;
+            letter-spacing: 2px;
+            transition: all 0.15s ease;
+            box-shadow: 0 0 12px rgba(0, 243, 255, 0.2);
+        }
+
+        .btn-cyber:active {
+            transform: scale(0.96);
+            background: var(--neon-cyan);
+            color: #000;
+            box-shadow: 0 0 22px rgba(0, 243, 255, 0.9);
+        }
+
+        .btn-cyber-green {
+            background: #071e12;
+            border-color: var(--neon-green);
+            color: var(--neon-green);
+            box-shadow: 0 0 12px rgba(0, 255, 102, 0.2);
+        }
+
+        .btn-cyber-green:active {
+            background: var(--neon-green);
+            color: #000;
+            box-shadow: 0 0 22px rgba(0, 255, 102, 0.9);
+        }
+
+        /* Background Matrix Canvas */
+        #matrix-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0.3;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col items-center justify-between p-4 relative select-none bg-[#07090e]">
+
+    <div class="crt-overlay fixed inset-0 z-40"></div>
+    <canvas id="matrix-canvas"></canvas>
+
+    <!-- HEADER / TOP BAR -->
+    <header class="w-full max-w-md flex items-center justify-between z-30 pt-2 px-1">
+        <div class="flex items-center space-x-2">
+            <span class="inline-block w-3 h-3 rounded-full bg-emerald-400 animate-ping"></span>
+            <h1 class="text-2xl font-bold tracking-widest text-cyan-400 font-['VT323']">ASCII_ROTATOR</h1>
+        </div>
+
+        <div class="flex items-center space-x-3">
+            <!-- Mute/Sound Toggle Button -->
+            <button id="sound-btn" class="p-2 rounded-lg bg-[#0d131f] border border-slate-700 text-cyan-400 hover:border-cyan-400 transition-all shadow-md">
+                <svg id="sound-icon-on" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072M18.364 5.636a9 9 0 010 12.728M11 5L6 9H2v6h4l5 4V5z"/>
+                </svg>
+                <svg id="sound-icon-off" class="w-5 h-5 hidden text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" clip-rule="evenodd"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"/>
+                </svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- MAIN VIEW CONTAINER -->
+    <main class="w-full max-w-md flex-1 flex flex-col items-center justify-center relative z-30 my-2">
+
+        <!-- ================= MAIN MENU SCREEN ================= -->
+        <section id="menu-screen" class="w-full flex flex-col items-center justify-center space-y-8 text-center py-4">
+            <div class="space-y-2">
+                <div class="text-xs uppercase tracking-widest text-emerald-400 font-bold bg-[#061e12] border border-emerald-800 px-3 py-1 rounded-full inline-block">
+                    PUZZLE RETRO ASCII
+                </div>
+                <h2 class="text-4xl font-extrabold text-white tracking-wider font-['VT323']">
+                    ROTACIÓN & ALINEACIÓN
+                </h2>
+                <p class="text-xs text-slate-400 max-w-xs mx-auto leading-relaxed">
+                    Toca la pantalla cuando la porción giratoria esté en su posición originaria (destello verde) para anclarla.
+                </p>
+            </div>
+
+            <!-- Stats Card (Solid Opaque Background) -->
+            <div class="w-full max-w-xs bg-[#0d131f] border border-slate-800 rounded-xl p-4 flex items-center justify-between shadow-2xl">
+                <div class="text-left">
+                    <p class="text-xs text-slate-400 uppercase tracking-wider font-semibold">Colección ASCII</p>
+                    <p id="menu-progress-text" class="text-xl font-bold text-cyan-400">Completadas: 0 / 9</p>
+                </div>
+                <div class="w-10 h-10 rounded-full bg-[#051824] border border-cyan-500/50 flex items-center justify-center text-cyan-400">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                    </svg>
+                </div>
+            </div>
+
+            <!-- Menu Action Buttons -->
+            <div class="w-full max-w-xs space-y-4 pt-2">
+                <button id="btn-play-new" class="w-full py-4 rounded-xl btn-cyber btn-cyber-green text-lg tracking-widest">
+                    NUEVA PARTIDA
+                </button>
+                <button id="btn-open-gallery" class="w-full py-3.5 rounded-xl btn-cyber text-md tracking-widest">
+                    GALERÍA
+                </button>
+            </div>
+        </section>
+
+        <!-- ================= GAMEPLAY SCREEN ================= -->
+        <section id="game-screen" class="hidden w-full flex-col items-center justify-center space-y-4">
+            
+            <!-- Game Status Top Bar -->
+            <div class="w-full flex items-center justify-between px-2 text-xs font-semibold">
+                <button id="btn-game-back" class="text-slate-300 hover:text-white flex items-center space-x-1 py-1.5 px-3 rounded-lg bg-[#0d131f] border border-slate-700 shadow-md">
+                    <span>‹ Menú</span>
+                </button>
+                <div id="game-title-badge" class="text-cyan-400 font-bold uppercase tracking-wider bg-[#0d131f] px-3 py-1.5 rounded-full border border-cyan-500/40 shadow-md">
+                    Gato Cyber
+                </div>
+                <div id="game-tiles-count" class="text-emerald-400 font-bold bg-[#0d131f] px-3 py-1.5 rounded-full border border-emerald-500/40 shadow-md">
+                    0 / 9
+                </div>
+            </div>
+
+            <!-- Interactive Opaque Game Grid -->
+            <div id="puzzle-grid" class="puzzle-grid-container">
+                <!-- 9 Tile elements injected by JavaScript -->
+            </div>
+
+            <!-- Tap Indicator / Guidance Banner -->
+            <div id="tap-hint" class="w-full max-w-xs text-center py-2 px-3 bg-[#0d131f] border border-slate-800 rounded-lg shadow-md">
+                <p class="text-xs text-slate-300 animate-pulse font-medium">
+                    [ TOCA EN CUALQUIER LUGAR CUANDO ESTÉ EN <span class="text-emerald-400 font-bold">VERDE</span> ]
+                </p>
+            </div>
+        </section>
+
+        <!-- ================= GALLERY SCREEN ================= -->
+        <section id="gallery-screen" class="hidden w-full flex-col items-center space-y-4 py-2">
+            <div class="w-full flex items-center justify-between px-1">
+                <button id="btn-gallery-back" class="text-slate-300 hover:text-white flex items-center space-x-1 py-1.5 px-3 rounded-lg bg-[#0d131f] border border-slate-700 text-xs shadow-md">
+                    <span>‹ Volver al Menú</span>
+                </button>
+                <h3 class="text-xl font-bold text-cyan-400 font-['VT323'] tracking-widest">GALERÍA DE ARTE</h3>
+            </div>
+
+            <!-- Gallery Cards Container -->
+            <div id="gallery-grid" class="w-full grid grid-cols-2 gap-3 max-h-[62vh] overflow-y-auto pr-1">
+                <!-- Gallery Cards injected dynamically with 100% OPAQUE backgrounds -->
+            </div>
+        </section>
+
+        <!-- ================= VICTORY MODAL OVERLAY ================= -->
+        <section id="victory-modal" class="hidden fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#05070a] p-6 text-center space-y-6 opacity-0 transition-opacity duration-500">
+            <div class="space-y-3">
+                <span class="text-xs font-bold tracking-widest text-emerald-400 bg-[#061e12] px-4 py-1.5 rounded-full border border-emerald-700">
+                    ¡DESAFÍO COMPLETADO!
+                </span>
+                <h2 id="victory-title" class="text-5xl font-extrabold text-emerald-400 font-['VT323'] tracking-widest drop-shadow-[0_0_20px_rgba(0,255,102,0.8)]">
+                    IMAGEN RECONSTRUIDA
+                </h2>
+                <p class="text-xs text-slate-300">
+                    Arte desbloqueado en tu galería personal.
+                </p>
+            </div>
+
+            <button id="btn-victory-menu" class="py-4 px-8 rounded-xl btn-cyber btn-cyber-green text-lg tracking-widest shadow-2xl">
+                VOLVER AL MENÚ
+            </button>
+        </section>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="w-full max-w-md text-center py-1 z-30">
+        <p class="text-[10px] text-slate-500 font-mono">ASCII ROTATOR • PROTOTIPO MÓVIL</p>
+    </footer>
+
+    <script>
+        // Web Audio Synthesizer for SFX
+        class SoundSynth {
+            constructor() {
+                this.ctx = null;
+                this.enabled = true;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (AudioCtx) this.ctx = new AudioCtx();
+                }
+                if (this.ctx && this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+
+            playLock() {
+                if (!this.enabled) return;
+                this.init();
+                if (!this.ctx) return;
+
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(523.25, this.ctx.currentTime); // C5
+                osc.frequency.exponentialRampToValueAtTime(1046.50, this.ctx.currentTime + 0.15); // C6
+
+                gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.2);
+            }
+
+            playMiss() {
+                if (!this.enabled) return;
+                this.init();
+                if (!this.ctx) return;
+
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(140, this.ctx.currentTime);
+                osc.frequency.linearRampToValueAtTime(70, this.ctx.currentTime + 0.15);
+
+                gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.15);
+            }
+
+            playWin() {
+                if (!this.enabled) return;
+                this.init();
+                if (!this.ctx) return;
+
+                const notes = [523.25, 659.25, 783.99, 1046.50]; // C E G C
+                notes.forEach((freq, i) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+
+                    osc.type = 'triangle';
+                    osc.frequency.value = freq;
+
+                    const startTime = this.ctx.currentTime + (i * 0.08);
+                    gain.gain.setValueAtTime(0.2, startTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.35);
+
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+
+                    osc.start(startTime);
+                    osc.stop(startTime + 0.35);
+                });
+            }
+        }
+
+        const sound = new SoundSynth();
+
+        const ASCII_ART_COLLECTION = [
+            {
+                id: 'cat',
+                name: 'Gato Cyber',
+                lines: [
+                    "                        ",
+                    "      /\\_       _/\\     ",
+                    "     /   \\_   _/   \\    ",
+                    "    /      \\ /      \\   ",
+                    "   |   O    |    O   |  ",
+                    "   |        ^        |  ",
+                    "    \\      ---      /   ",
+                    "     \\_           _/    ",
+                    "       \\---------/      ",
+                    "       /    |    \\      ",
+                    "      /  |  |  |  \\     ",
+                    "     /   |  |  |   \\    ",
+                    "    /    |__|__|    \\   ",
+                    "   /                 \\  ",
+                    "  |   .-----------.   | ",
+                    "  |  /             \\  | ",
+                    "  | |               | | ",
+                    "   \\ \\_____________ / /  ",
+                    "    \\_______________/   ",
+                    "     |___|     |___|    ",
+                    "     (   )     (   )    ",
+                    "                        ",
+                    "                        ",
+                    "                        "
+                ]
+            },
+            {
+                id: 'skull',
+                name: 'Calavera Neon',
+                lines: [
+                    "                        ",
+                    "        .------.        ",
+                    "       /  _  _  \\       ",
+                    "      |  (o)(o)  |      ",
+                    "      |   /  \\   |      ",
+                    "       \\  \\__/  /       ",
+                    "        '--||--'        ",
+                    "      .----------.      ",
+                    "     /            \\     ",
+                    "    |  .---..---.  |    ",
+                    "    |  | # || # |  |    ",
+                    "    |  '---''---'  |    ",
+                    "     \\    ||||    /     ",
+                    "      '----------'      ",
+                    "        |  ||  |        ",
+                    "        |__||__|        ",
+                    "       [________]       ",
+                    "        |  ||  |        ",
+                    "        '--''--'        ",
+                    "                        ",
+                    "                        ",
+                    "                        ",
+                    "                        ",
+                    "                        "
+                ]
+            },
+            {
+                id: 'castle',
+                name: 'Castillo Retro',
+                lines: [
+                    "   |~|             |~|  ",
+                    "  | | |           | | | ",
+                    " /_____\\         /_____\\",
+                    " |:::::|         |:::::|",
+                    " |:::::|_________|:::::|",
+                    " |::::| ::::::::: |::::|",
+                    " |::::| ::::::::: |::::|",
+                    " |::::| ::::::::: |::::|",
+                    " |::::|  _______  |::::|",
+                    " |::::|  |  |  |  |::::|",
+                    " |::::|  |  |  |  |::::|",
+                    " |::::|  |  |  |  |::::|",
+                    " |::::|  |__|__|  |::::|",
+                    " |::::| ::::::::: |::::|",
+                    " |::::| ::::::::: |::::|",
+                    " |::::| ::::::::: |::::|",
+                    " |::::| ::::::::: |::::|",
+                    " |::::|___________|::::|",
+                    " |:::::::::::::::::::::|",
+                    " |:::::::::::::::::::::|",
+                    "  ~~~~~~~~~~~~~~~~~~~~~ ",
+                    "                        ",
+                    "                        ",
+                    "                        "
+                ]
+            },
+            {
+                id: 'sword',
+                name: 'Espada Mística',
+                lines: [
+                    "           /\\           ",
+                    "          /  \\          ",
+                    "         |    |         ",
+                    "         |    |         ",
+                    "         |    |         ",
+                    "         |    |         ",
+                    "         |    |         ",
+                    "         |    |         ",
+                    "         |    |         ",
+                    "         |    |         ",
+                    "         |    |         ",
+                    "         |    |         ",
+                    "        /______\\        ",
+                    "       |========|       ",
+                    "          |  |          ",
+                    "          |  |          ",
+                    "          |  |          ",
+                    "          |  |          ",
+                    "          |  |          ",
+                    "         /____\\         ",
+                    "                        ",
+                    "                        ",
+                    "                        ",
+                    "                        "
+                ]
+            },
+            {
+                id: 'ufo',
+                name: 'Ovni Alien',
+                lines: [
+                    "                        ",
+                    "          .---.         ",
+                    "        ./     \\.       ",
+                    "       /         \\      ",
+                    "      |   (o)-(o) |     ",
+                    "   .-'\\     <     /'-.  ",
+                    "  /    '---------'    \\ ",
+                    " /                     \\",
+                    "|_______________________|",
+                    "  '---(O)---(O)---(O)---'",
+                    "       /    |    \\      ",
+                    "      /     |     \\     ",
+                    "     /      |      \\    ",
+                    "    /       |       \\   ",
+                    "   /        |        \\  ",
+                    "  /         |         \\ ",
+                    " /          |          \\",
+                    "'-----------'-----------'",
+                    "                        ",
+                    "                        ",
+                    "                        ",
+                    "                        ",
+                    "                        ",
+                    "                        "
+                ]
+            },
+            {
+                id: 'robot',
+                name: 'Robot V-8',
+                lines: [
+                    "        .-------.       ",
+                    "        | |G|G| |       ",
+                    "        |=======|       ",
+                    "        | [___] |       ",
+                    "        '-------'       ",
+                    "            ||          ",
+                    "      .------------.    ",
+                    "     /|  .------.  |\\   ",
+                    "    | |  | ===  |  | |  ",
+                    "    | |  | ===  |  | |  ",
+                    "    | |  '------'  | |  ",
+                    "     \\|            |/   ",
+                    "      '------------'    ",
+                    "         |  ||  |       ",
+                    "         |__||__|       ",
+                    "        /   ||   \\      ",
+                    "       /____||____\\     ",
+                    "        |  ||  |        ",
+                    "        |  ||  |        ",
+                    "       [____][____]     ",
+                    "                        ",
+                    "                        ",
+                    "                        ",
+                    "                        "
+                ]
+            },
+            {
+                id: 'dragon',
+                name: 'Dragón Digital',
+                lines: [
+                    "          /|  /|        ",
+                    "         / | / |        ",
+                    "        |  |/  |        ",
+                    "        |   _  |        ",
+                    "        /  (o) \\        ",
+                    "       /    __/         ",
+                    "      /   _/            ",
+                    "     /   /____          ",
+                    "    /    ____/          ",
+                    "   /   _/               ",
+                    "  /   /                 ",
+                    " (   (                  ",
+                    "  \\   \\                 ",
+                    "   \\   \\____            ",
+                    "    \\______ \\           ",
+                    "           \\ \\          ",
+                    "            \\ \\         ",
+                    "             \\ \\        ",
+                    "              \\ \\       ",
+                    "               \\/       ",
+                    "                        ",
+                    "                        ",
+                    "                        ",
+                    "                        "
+                ]
+            },
+            {
+                id: 'owl',
+                name: 'Búho Sabio',
+                lines: [
+                    "        /\\     /\\       ",
+                    "       ((\\v/\\v/))       ",
+                    "        ():::()         ",
+                    "        /  _  \\         ",
+                    "       / (o)(o) \\       ",
+                    "      (   v v   )       ",
+                    "     /|  '---'  |\\      ",
+                    "    / |         | \\     ",
+                    "   (  |         |  )    ",
+                    "    \\ |         | /     ",
+                    "     \\|         |/      ",
+                    "      (         )       ",
+                    "       \\       /        ",
+                    "       /  / \\  \\        ",
+                    "      (__(   )__)       ",
+                    "       ===/=\\===        ",
+                    "         /   \\          ",
+                    "                        ",
+                    "                        ",
+                    "                        ",
+                    "                        ",
+                    "                        ",
+                    "                        ",
+                    "                        "
+                ]
+            },
+            {
+                id: 'eye',
+                name: 'Ojo Cyber',
+                lines: [
+                    "                        ",
+                    "         .-----.        ",
+                    "       .-'     '-.      ",
+                    "     .-'         '-.    ",
+                    "    /    .-----.    \\   ",
+                    "   /   .'       '.   \\  ",
+                    "  |   /   .---.   \\   | ",
+                    "  |  |   / (o) \\   |  | ",
+                    "  |  |  |   |   |  |  | ",
+                    "  |   \\  \\     /  /   | ",
+                    "   \\   '. '---' .'   /  ",
+                    "    \\    '-----'    /   ",
+                    "     '-.         .-'    ",
+                    "       '-.     .-'      ",
+                    "         '-----'        ",
+                    "                        ",
+                    "                        ",
+                    "                        ",
+                    "                        ",
+                    "                        ",
+                    "                        ",
+                    "                        ",
+                    "                        ",
+                    "                        "
+                ]
+            }
+        ];
+
+        const STORAGE_KEY = 'ascii_rotator_progress_v2';
+
+        function getCompletedArtIds() {
+            try {
+                const stored = localStorage.getItem(STORAGE_KEY);
+                return stored ? JSON.parse(stored) : [];
+            } catch(e) {
+                return [];
+            }
+        }
+
+        function saveCompletedArtId(id) {
+            const completed = getCompletedArtIds();
+            if (!completed.includes(id)) {
+                completed.push(id);
+                try {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(completed));
+                } catch(e) {}
+            }
+        }
+
+        const GRID_SIZE = 3;
+        const CHARS_PER_TILE = 8;
+        const ROTATION_SPEED = 0.13; // Degrees per millisecond
+        const SWEET_SPOT_TOLERANCE = 14; // Alignment tolerance window
+
+        let currentArt = null;
+        let tiles = [];
+        let activeTileIndex = -1;
+        let gameState = 'MENU'; // 'MENU', 'GAME', 'GALLERY', 'VICTORY'
+        let lastTimestamp = 0;
+        let animationFrameId = null;
+
+        // DOM References
+        const menuScreen = document.getElementById('menu-screen');
+        const gameScreen = document.getElementById('game-screen');
+        const galleryScreen = document.getElementById('gallery-screen');
+        const victoryModal = document.getElementById('victory-modal');
+
+        const puzzleGrid = document.getElementById('puzzle-grid');
+        const menuProgressText = document.getElementById('menu-progress-text');
+        const gameTitleBadge = document.getElementById('game-title-badge');
+        const gameTilesCount = document.getElementById('game-tiles-count');
+        const galleryGrid = document.getElementById('gallery-grid');
+
+        const btnPlayNew = document.getElementById('btn-play-new');
+        const btnOpenGallery = document.getElementById('btn-open-gallery');
+        const btnGameBack = document.getElementById('btn-game-back');
+        const btnGalleryBack = document.getElementById('btn-gallery-back');
+        const btnVictoryMenu = document.getElementById('btn-victory-menu');
+        const soundBtn = document.getElementById('sound-btn');
+        const soundIconOn = document.getElementById('sound-icon-on');
+        const soundIconOff = document.getElementById('sound-icon-off');
+
+        soundBtn.addEventListener('click', () => {
+            sound.enabled = !sound.enabled;
+            if (sound.enabled) {
+                soundIconOn.classList.remove('hidden');
+                soundIconOff.classList.add('hidden');
+            } else {
+                soundIconOn.classList.add('hidden');
+                soundIconOff.classList.remove('hidden');
+            }
+        });
+
+        btnPlayNew.addEventListener('click', () => {
+            const completed = getCompletedArtIds();
+            let uncompleted = ASCII_ART_COLLECTION.filter(a => !completed.includes(a.id));
+            if (uncompleted.length === 0) uncompleted = ASCII_ART_COLLECTION;
+
+            const randomChoice = uncompleted[Math.floor(Math.random() * uncompleted.length)];
+            startPuzzle(randomChoice);
+        });
+
+        btnOpenGallery.addEventListener('click', showGallery);
+        btnGameBack.addEventListener('click', showMenu);
+        btnGalleryBack.addEventListener('click', showMenu);
+        btnVictoryMenu.addEventListener('click', showMenu);
+
+        function updateMenuProgress() {
+            const completed = getCompletedArtIds();
+            menuProgressText.innerText = `Completadas: ${completed.length} / ${ASCII_ART_COLLECTION.length}`;
+        }
+
+        function sliceAsciiArt(artObj) {
+            const formattedLines = artObj.lines.map(line => line.padEnd(24, ' ').substring(0, 24));
+            const slices = [];
+
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    let tileBlock = "";
+                    for (let rowOffset = 0; rowOffset < CHARS_PER_TILE; rowOffset++) {
+                        const y = (r * CHARS_PER_TILE) + rowOffset;
+                        const startX = c * CHARS_PER_TILE;
+                        const linePart = formattedLines[y].substring(startX, startX + CHARS_PER_TILE);
+                        tileBlock += linePart + "\n";
+                    }
+                    slices.push(tileBlock);
+                }
+            }
+            return slices;
+        }
+
+        function startPuzzle(artObj) {
+            currentArt = artObj;
+            gameState = 'GAME';
+
+            menuScreen.classList.add('hidden');
+            galleryScreen.classList.add('hidden');
+            victoryModal.classList.add('hidden');
+            victoryModal.classList.add('opacity-0');
+            gameScreen.classList.remove('hidden');
+            gameScreen.classList.add('flex');
+
+            gameTitleBadge.innerText = artObj.name;
+            gameTilesCount.innerText = `0 / 9`;
+
+            puzzleGrid.innerHTML = '';
+            puzzleGrid.className = 'puzzle-grid-container';
+
+            const tileSlices = sliceAsciiArt(artObj);
+            tiles = [];
+
+            tileSlices.forEach((sliceStr) => {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'tile-wrapper';
+
+                const reticle = document.createElement('div');
+                reticle.className = 'target-reticle';
+                wrapper.appendChild(reticle);
+
+                const inner = document.createElement('div');
+                inner.className = 'tile-inner';
+
+                const pre = document.createElement('pre');
+                pre.className = 'ascii-text';
+                pre.textContent = sliceStr;
+
+                inner.appendChild(pre);
+                wrapper.appendChild(inner);
+                puzzleGrid.appendChild(wrapper);
+
+                const initialAngle = 40 + Math.random() * 260;
+                inner.style.transform = `rotate(${initialAngle}deg)`;
+
+                tiles.push({
+                    wrapper: wrapper,
+                    inner: inner,
+                    angle: initialAngle,
+                    locked: false,
+                    inSweetSpot: false
+                });
+            });
+
+            pickNextActiveTile();
+
+            lastTimestamp = performance.now();
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        function pickNextActiveTile() {
+            tiles.forEach(t => t.wrapper.classList.remove('tile-active', 'tile-sweetspot'));
+
+            const unlockedIndices = [];
+            tiles.forEach((t, i) => {
+                if (!t.locked) unlockedIndices.push(i);
+            });
+
+            if (unlockedIndices.length === 0) {
+                handleVictory();
+                return;
+            }
+
+            activeTileIndex = unlockedIndices[Math.floor(Math.random() * unlockedIndices.length)];
+            const activeTile = tiles[activeTileIndex];
+            activeTile.wrapper.classList.add('tile-active');
+        }
+
+        function gameLoop(timestamp) {
+            if (gameState !== 'GAME') return;
+
+            const delta = timestamp - lastTimestamp;
+            lastTimestamp = timestamp;
+
+            if (activeTileIndex !== -1 && activeTileIndex < tiles.length) {
+                const tile = tiles[activeTileIndex];
+
+                // Dextrorotary (clockwise) continuous rotation
+                tile.angle = (tile.angle + ROTATION_SPEED * delta) % 360;
+
+                const normalizedAngle = tile.angle % 360;
+                const distToZero = Math.min(normalizedAngle, 360 - normalizedAngle);
+
+                tile.inSweetSpot = (distToZero <= SWEET_SPOT_TOLERANCE);
+
+                if (tile.inSweetSpot) {
+                    tile.wrapper.classList.add('tile-sweetspot');
+                } else {
+                    tile.wrapper.classList.remove('tile-sweetspot');
+                }
+
+                tile.inner.style.transform = `rotate(${tile.angle}deg)`;
+            }
+
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        function handleTap(e) {
+            if (e.target.closest('button')) return;
+
+            if (gameState === 'GAME' && activeTileIndex !== -1) {
+                const tile = tiles[activeTileIndex];
+
+                if (tile.inSweetSpot) {
+                    // LOCKED AT ORIGIN
+                    tile.locked = true;
+                    tile.angle = 0;
+                    tile.inner.style.transform = `rotate(0deg)`;
+
+                    tile.wrapper.classList.remove('tile-active', 'tile-sweetspot');
+                    tile.wrapper.classList.add('tile-locked');
+
+                    sound.playLock();
+
+                    const lockedCount = tiles.filter(t => t.locked).length;
+                    gameTilesCount.innerText = `${lockedCount} / 9`;
+
+                    pickNextActiveTile();
+                } else {
+                    // MISALIGNED TAP
+                    sound.playMiss();
+                    gameScreen.classList.remove('miss-shake');
+                    void gameScreen.offsetWidth;
+                    gameScreen.classList.add('miss-shake');
+                }
+            }
+        }
+
+        document.addEventListener('pointerdown', handleTap);
+
+        function handleVictory() {
+            gameState = 'VICTORY';
+            activeTileIndex = -1;
+            cancelAnimationFrame(animationFrameId);
+
+            saveCompletedArtId(currentArt.id);
+            sound.playWin();
+
+            puzzleGrid.classList.add('completed');
+
+            setTimeout(() => {
+                victoryModal.classList.remove('hidden');
+                setTimeout(() => {
+                    victoryModal.classList.remove('opacity-0');
+                }, 50);
+            }, 1200);
+        }
+
+        function showGallery() {
+            gameState = 'GALLERY';
+
+            menuScreen.classList.add('hidden');
+            gameScreen.classList.add('hidden');
+            victoryModal.classList.add('hidden');
+            galleryScreen.classList.remove('hidden');
+            galleryScreen.classList.add('flex');
+
+            galleryGrid.innerHTML = '';
+            const completed = getCompletedArtIds();
+
+            ASCII_ART_COLLECTION.forEach(art => {
+                const isCompleted = completed.includes(art.id);
+                const card = document.createElement('div');
+                
+                // Solid Opaque Card Class (bg-[#0d131f] - NO TRANSPARENCY)
+                card.className = `p-3 rounded-xl border flex flex-col items-center justify-between space-y-2 cursor-pointer transition-all ${
+                    isCompleted 
+                    ? 'bg-[#0d131f] border-cyan-500/60 hover:border-cyan-400 shadow-[0_0_15px_rgba(0,243,255,0.2)]' 
+                    : 'bg-[#060910] border-slate-800 opacity-60'
+                }`;
+
+                if (isCompleted) {
+                    const miniPre = document.createElement('pre');
+                    miniPre.className = 'text-[5px] leading-none font-mono text-emerald-400 select-none overflow-hidden h-20 w-full flex items-center justify-center text-center';
+                    miniPre.textContent = art.lines.slice(4, 18).map(l => l.substring(4, 20)).join('\n');
+                    card.appendChild(miniPre);
+                } else {
+                    const lockDiv = document.createElement('div');
+                    lockDiv.className = 'h-20 w-full flex flex-col items-center justify-center text-slate-600 space-y-1';
+                    lockDiv.innerHTML = `
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                        </svg>
+                        <span class="text-[10px] uppercase tracking-wider font-bold">Bloqueado</span>
+                    `;
+                    card.appendChild(lockDiv);
+                }
+
+                const titleP = document.createElement('p');
+                titleP.className = `text-xs font-bold ${isCompleted ? 'text-cyan-400' : 'text-slate-500'}`;
+                titleP.innerText = art.name;
+                card.appendChild(titleP);
+
+                if (isCompleted) {
+                    const replayBtn = document.createElement('span');
+                    replayBtn.className = 'text-[10px] font-bold text-emerald-400 bg-[#061e12] px-2 py-0.5 rounded border border-emerald-700/60';
+                    replayBtn.innerText = 'REJUGAR';
+                    card.appendChild(replayBtn);
+
+                    card.addEventListener('click', () => {
+                        startPuzzle(art);
+                    });
+                }
+
+                galleryGrid.appendChild(card);
+            });
+        }
+
+        function showMenu() {
+            gameState = 'MENU';
+
+            gameScreen.classList.add('hidden');
+            galleryScreen.classList.add('hidden');
+            victoryModal.classList.add('hidden');
+            victoryModal.classList.add('opacity-0');
+            menuScreen.classList.remove('hidden');
+
+            updateMenuProgress();
+        }
+
+        const canvas = document.getElementById('matrix-canvas');
+        const ctx = canvas.getContext('2d');
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        const chars = "0101010101110001011";
+        const fontSize = 12;
+        const columns = Math.floor(canvas.width / fontSize);
+        const drops = Array(columns).fill(1);
+
+        function drawMatrix() {
+            ctx.fillStyle = "rgba(7, 9, 14, 0.1)";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = "#00ff66";
+            ctx.font = `${fontSize}px monospace`;
+
+            for (let i = 0; i < drops.length; i++) {
+                const text = chars.charAt(Math.floor(Math.random() * chars.length));
+                ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+
+                if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
+                    drops[i] = 0;
+                }
+                drops[i]++;
+            }
+        }
+
+        setInterval(drawMatrix, 40);
+
+        // Initial launch
+        updateMenuProgress();
+    </script>
+</body>
+</html>
